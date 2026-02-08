@@ -1,0 +1,1 @@
+document.getElementById("catalog").innerHTML="<p>Здесь будет список товаров.</p>";
