@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Cinematic Subtitle Player</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        #scene-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #video-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #video-layer video {
+            display: none;
+        }
+
+        #subtitle-layer {
+            position: fixed;
+            bottom: 10%;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        #subtitle-text {
+            display: inline-block;
+            font-size: clamp(28px, 4vw, 64px);
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: 2px;
+            text-shadow:
+                0 0 20px rgba(100, 180, 255, 0.8),
+                0 0 40px rgba(100, 180, 255, 0.4),
+                0 0 80px rgba(100, 180, 255, 0.2),
+                0 4px 8px rgba(0, 0, 0, 0.9);
+            opacity: 0;
+            transform: translateY(10px) scale(0.95);
+            transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+            padding: 10px 30px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+
+        #subtitle-text.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        #subtitle-text.fade-out {
+            opacity: 0;
+            transform: translateY(-10px) scale(0.95);
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 2%;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px 25px;
+            border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        #controls button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        #controls button:hover {
+            background: rgba(100, 180, 255, 0.3);
+            border-color: rgba(100, 180, 255, 0.5);
+        }
+
+        #progress-bar {
+            width: 200px;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        #progress-bar::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #64b4ff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(100, 180, 255, 0.6);
+        }
+
+        #time-display {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+            min-width: 90px;
+            text-align: center;
+        }
+
+        #volume-slider {
+            width: 80px;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        #volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #64b4ff;
+            border-radius: 50%;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(100, 180, 255, 0.1);
+            border-top: 3px solid #64b4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 20px;
+            font-size: 14px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Ambient particles via CSS for extra depth */
+        .particle {
+            position: fixed;
+            width: 2px;
+            height: 2px;
+            background: rgba(100, 180, 255, 0.3);
+            border-radius: 50%;
+            z-index: 2;
+            pointer-events: none;
+            animation: float-particle linear infinite;
+        }
+
+        @keyframes float-particle {
+            0% {
+                transform: translateY(100vh) translateX(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-10vh) translateX(50px);
+                opacity: 0;
+            }
+        }
+
+        /* Waveform visualizer */
+        #waveform {
+            position: fixed;
+            bottom: 8%;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 30px;
+            opacity: 0.3;
+        }
+
+        .wave-bar {
+            width: 3px;
+            background: linear-gradient(to top, rgba(100, 180, 255, 0.8), rgba(100, 180, 255, 0.1));
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loading">
+        <div class="loader"></div>
+        <div class="loading-text">Загрузка...</div>
+    </div>
+
+    <canvas id="scene-container"></canvas>
+
+    <div id="video-layer">
+        <video id="main-video" preload="auto" crossorigin="anonymous">
+            <source src="123.mp4" type="video/mp4">
+        </video>
+    </div>
+
+    <div id="waveform"></div>
+
+    <div id="subtitle-layer">
+        <div id="subtitle-text"></div>
+    </div>
+
+    <div id="controls">
+        <button id="play-btn">▶ Play</button>
+        <input type="range" id="progress-bar" min="0" max="100" value="0" step="0.1">
+        <span id="time-display">0:00 / 0:00</span>
+        <input type="range" id="volume-slider" min="0" max="100" value="80">
+    </div>
+
+    <script>
+        // ============================================
+        // SRT PARSER
+        // ============================================
+        function parseSRT(srtText) {
+            const subtitles = [];
+            const blocks = srtText.trim().split(/\n\s*\n/);
+
+            for (const block of blocks) {
+                const lines = block.trim().split('\n');
+                if (lines.length < 3) continue;
+
+                const timeMatch = lines[1].match(
+                    /(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/
+                );
+                if (!timeMatch) continue;
+
+                const start = parseInt(timeMatch[1]) * 3600
+                    + parseInt(timeMatch[2]) * 60
+                    + parseInt(timeMatch[3])
+                    + parseInt(timeMatch[4]) / 1000;
+
+                const end = parseInt(timeMatch[5]) * 3600
+                    + parseInt(timeMatch[6]) * 60
+                    + parseInt(timeMatch[7])
+                    + parseInt(timeMatch[8]) / 1000;
+
+                const text = lines.slice(2).join(' ').replace(/<[^>]*>/g, '').trim();
+
+                subtitles.push({ start, end, text });
+            }
+
+            return subtitles;
+        }
+
+        // ============================================
+        // 3D ENGINE (Pure Canvas — no dependencies)
+        // ============================================
+        const canvas = document.getElementById('scene-container');
+        const ctx = canvas.getContext('2d');
+        let W, H;
+
+        function resize() {
+            W = canvas.width = window.innerWidth;
+            H = canvas.height = window.innerHeight;
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        // --- 3D Math ---
+        function rotateX(p, a) {
+            const c = Math.cos(a), s = Math.sin(a);
+            return [p[0], p[1] * c - p[2] * s, p[1] * s + p[2] * c];
+        }
+        function rotateY(p, a) {
+            const c = Math.cos(a), s = Math.sin(a);
+            return [p[0] * c + p[2] * s, p[1], -p[0] * s + p[2] * c];
+        }
+        function rotateZ(p, a) {
+            const c = Math.cos(a), s = Math.sin(a);
+            return [p[0] * c - p[1] * s, p[0] * s + p[1] * c, p[2]];
+        }
+        function project(p, fov = 600) {
+            const z = p[2] + 5;
+            if (z <= 0.1) return null;
+            const scale = fov / z;
+            return [p[0] * scale + W / 2, p[1] * scale + H / 2, scale];
+        }
+
+        // --- 3D Objects ---
+        class Shape3D {
+            constructor(type, x, y, z, size, color, speed) {
+                this.type = type;
+                this.pos = [x, y, z];
+                this.size = size;
+                this.color = color;
+                this.rx = Math.random() * Math.PI * 2;
+                this.ry = Math.random() * Math.PI * 2;
+                this.rz = Math.random() * Math.PI * 2;
+                this.sx = speed * (0.3 + Math.random() * 0.7) * (Math.random() > 0.5 ? 1 : -1);
+                this.sy = speed * (0.3 + Math.random() * 0.7) * (Math.random() > 0.5 ? 1 : -1);
+                this.sz = speed * (0.2 + Math.random() * 0.5) * (Math.random() > 0.5 ? 1 : -1);
+                this.drx = (0.002 + Math.random() * 0.008) * (Math.random() > 0.5 ? 1 : -1);
+                this.dry = (0.002 + Math.random() * 0.008) * (Math.random() > 0.5 ? 1 : -1);
+                this.drz = (0.001 + Math.random() * 0.004) * (Math.random() > 0.5 ? 1 : -1);
+                this.vertices = this.generateVertices();
+                this.edges = this.generateEdges();
+                this.baseOpacity = 0.15 + Math.random() * 0.35;
+                this.pulsePhase = Math.random() * Math.PI * 2;
+            }
+
+            generateVertices() {
+                const s = this.size;
+                switch (this.type) {
+                    case 'cube':
+                        return [
+                            [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
+                            [-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s]
+                        ];
+                    case 'octahedron':
+                        return [
+                            [0,-s,0],[0,s,0],[-s,0,0],[s,0,0],[0,0,-s],[0,0,s]
+                        ];
+                    case 'icosahedron': {
+                        const t = (1 + Math.sqrt(5)) / 2;
+                        const n = s / Math.sqrt(1 + t * t);
+                        const tn = t * n;
+                        return [
+                            [-n, tn, 0],[n, tn, 0],[-n,-tn, 0],[n,-tn, 0],
+                            [0,-n, tn],[0, n, tn],[0,-n,-tn],[0, n,-tn],
+                            [tn, 0,-n],[tn, 0, n],[-tn, 0,-n],[-tn, 0, n]
+                        ];
+                    }
+                    case 'tetrahedron':
+                        return [
+                            [s, s, s],[-s,-s, s],[-s, s,-s],[s,-s,-s]
+                        ];
+                    case 'dodecahedron': {
+                        const phi = (1 + Math.sqrt(5)) / 2;
+                        const a = s * 0.6;
+                        const b = a * phi;
+                        const c = a / phi;
+                        return [
+                            [a,a,a],[a,a,-a],[a,-a,a],[a,-a,-a],
+                            [-a,a,a],[-a,a,-a],[-a,-a,a],[-a,-a,-a],
+                            [0,c,b],[0,c,-b],[0,-c,b],[0,-c,-b],
+                            [c,b,0],[c,-b,0],[-c,b,0],[-c,-b,0],
+                            [b,0,c],[b,0,-c],[-b,0,c],[-b,0,-c]
+                        ];
+                    }
+                    case 'torus': {
+                        const verts = [];
+                        const R = s * 0.8, r = s * 0.3;
+                        const seg = 12, ring = 8;
+                        for (let i = 0; i < seg; i++) {
+                            for (let j = 0; j < ring; j++) {
+                                const u = (i / seg) * Math.PI * 2;
+                                const v = (j / ring) * Math.PI * 2;
+                                verts.push([
+                                    (R + r * Math.cos(v)) * Math.cos(u),
+                                    (R + r * Math.cos(v)) * Math.sin(u),
+                                    r * Math.sin(v)
+                                ]);
+                            }
+                        }
+                        return verts;
+                    }
+                    case 'diamond': {
+                        const verts = [];
+                        const sides = 8;
+                        verts.push([0, -s, 0]);
+                        verts.push([0, s, 0]);
+                        for (let i = 0; i < sides; i++) {
+                            const angle = (i / sides) * Math.PI * 2;
+                            verts.push([Math.cos(angle) * s * 0.6, 0, Math.sin(angle) * s * 0.6]);
+                        }
+                        return verts;
+                    }
+                    default:
+                        return [[-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
+                                [-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s]];
+                }
+            }
+
+            generateEdges() {
+                switch (this.type) {
+                    case 'cube':
+                        return [
+                            [0,1],[1,2],[2,3],[3,0],
+                            [4,5],[5,6],[6,7],[7,4],
+                            [0,4],[1,5],[2,6],[3,7]
+                        ];
+                    case 'octahedron':
+                        return [
+                            [0,2],[0,3],[0,4],[0,5],
+                            [1,2],[1,3],[1,4],[1,5],
+                            [2,4],[4,3],[3,5],[5,2]
+                        ];
+                    case 'icosahedron':
+                        return [
+                            [0,1],[0,5],[0,7],[0,10],[0,11],
+                            [1,5],[1,7],[1,8],[1,9],
+                            [2,3],[2,4],[2,6],[2,10],[2,11],
+                            [3,4],[3,6],[3,8],[3,9],
+                            [4,5],[4,6],[4,11],
+                            [5,9],[5,11],[6,7],[6,8],
+                            [7,8],[7,10],[8,9],[9,4],[10,11]
+                        ];
+                    case 'tetrahedron':
+                        return [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]];
+                    case 'dodecahedron': {
+                        const edges = [];
+                        const v = this.vertices;
+                        for (let i = 0; i < v.length; i++) {
+                            for (let j = i + 1; j < v.length; j++) {
+                                const dx = v[i][0] - v[j][0];
+                                const dy = v[i][1] - v[j][1];
+                                const dz = v[i][2] - v[j][2];
+                                const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                                if (dist < this.size * 0.85) edges.push([i, j]);
+                            }
+                        }
+                        return edges;
+                    }
+                    case 'torus': {
+                        const edges = [];
+                        const seg = 12, ring = 8;
+                        for (let i = 0; i < seg; i++) {
+                            for (let j = 0; j < ring; j++) {
+                                const curr = i * ring + j;
+                                const nextJ = i * ring + ((j + 1) % ring);
+                                const nextI = ((i + 1) % seg) * ring + j;
+                                edges.push([curr, nextJ]);
+                                edges.push([curr, nextI]);
+                            }
+                        }
+                        return edges;
+                    }
+                    case 'diamond': {
+                        const edges = [];
+                        const sides = 8;
+                        for (let i = 0; i < sides; i++) {
+                            edges.push([0, i + 2]);
+                            edges.push([1, i + 2]);
+                            edges.push([i + 2, ((i + 1) % sides) + 2]);
+                        }
+                        return edges;
+                    }
+                    default:
+                        return [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+                }
+            }
+
+            update(dt, time) {
+                this.rx += this.drx;
+                this.ry += this.dry;
+                this.rz += this.drz;
+
+                this.pos[0] += this.sx * dt;
+                this.pos[1] += this.sy * dt;
+                this.pos[2] += this.sz * dt * 0.3;
+
+                // Bounds
+                const bound = 6;
+                if (this.pos[0] > bound) this.sx *= -1;
+                if (this.pos[0] < -bound) this.sx *= -1;
+                if (this.pos[1] > bound * 0.6) this.sy *= -1;
+                if (this.pos[1] < -bound * 0.6) this.sy *= -1;
+                if (this.pos[2] > 8) this.sz *= -1;
+                if (this.pos[2] < -2) this.sz *= -1;
+            }
+
+            draw(ctx, time, audioLevel) {
+                const pulse = 1 + Math.sin(time * 2 + this.pulsePhase) * 0.1;
+                const opacity = this.baseOpacity * (0.7 + audioLevel * 0.6) * pulse;
+
+                const transformed = this.vertices.map(v => {
+                    let p = [...v];
+                    p = rotateX(p, this.rx);
+                    p = rotateY(p, this.ry);
+                    p = rotateZ(p, this.rz);
+                    p[0] += this.pos[0];
+                    p[1] += this.pos[1];
+                    p[2] += this.pos[2];
+                    return p;
+                });
+
+                const projected = transformed.map(p => project(p));
+
+                // Draw edges
+                ctx.strokeStyle = this.color.replace('ALPHA', (opacity * 0.8).toFixed(3));
+                ctx.lineWidth = 1 + audioLevel * 1.5;
+                ctx.lineCap = 'round';
+
+                for (const [a, b] of this.edges) {
+                    const pa = projected[a];
+                    const pb = projected[b];
+                    if (!pa || !pb) continue;
+
+                    ctx.beginPath();
+                    ctx.moveTo(pa[0], pa[1]);
+                    ctx.lineTo(pb[0], pb[1]);
+                    ctx.stroke();
+                }
+
+                // Draw vertices as glowing dots
+                ctx.fillStyle = this.color.replace('ALPHA', (opacity * 1.2).toFixed(3));
+                for (const p of projected) {
+                    if (!p) continue;
+                    const dotSize = 1.5 + audioLevel * 2;
+                    ctx.beginPath();
+                    ctx.arc(p[0], p[1], dotSize, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Glow effect for vertices
+                if (audioLevel > 0.3) {
+                    ctx.fillStyle = this.color.replace('ALPHA', (opacity * 0.3 * audioLevel).toFixed(3));
+                    for (const p of projected) {
+                        if (!p) continue;
+                        ctx.beginPath();
+                        ctx.arc(p[0], p[1], 4 + audioLevel * 6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+        }
+
+        // --- Create shapes ---
+        const shapes = [];
+        const shapeTypes = ['cube', 'octahedron', 'icosahedron', 'tetrahedron', 'torus', 'diamond', 'dodecahedron'];
+        const colors = [
+            'rgba(100, 180, 255, ALPHA)',
+            'rgba(150, 100, 255, ALPHA)',
+            'rgba(100, 255, 200, ALPHA)',
+            'rgba(255, 100, 150, ALPHA)',
+            'rgba(255, 200, 100, ALPHA)',
+            'rgba(200, 100, 255, ALPHA)',
+            'rgba(100, 255, 255, ALPHA)',
+            'rgba(180, 180, 255, ALPHA)',
+        ];
+
+        for (let i = 0; i < 15; i++) {
+            const type = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
+            const x = (Math.random() - 0.5) * 10;
+            const y = (Math.random() - 0.5) * 6;
+            const z = 1 + Math.random() * 8;
+            const size = 0.2 + Math.random() * 0.6;
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const speed = 0.1 + Math.random() * 0.3;
+            shapes.push(new Shape3D(type, x, y, z, size, color, speed));
+        }
+
+        // --- Floating grid lines ---
+        class GridPlane {
+            constructor() {
+                this.yOffset = 2.5;
+                this.size = 15;
+                this.divisions = 20;
+            }
+
+            draw(ctx, time, audioLevel) {
+                const opacity = 0.05 + audioLevel * 0.05;
+                ctx.strokeStyle = `rgba(100, 180, 255, ${opacity})`;
+                ctx.lineWidth = 0.5;
+
+                const half = this.size / 2;
+                const step = this.size / this.divisions;
+
+                for (let i = 0; i <= this.divisions; i++) {
+                    const x = -half + i * step;
+
+                    const p1 = project([x, this.yOffset, 0]);
+                    const p2 = project([x, this.yOffset, this.size]);
+                    if (p1 && p2) {
+                        ctx.beginPath();
+                        ctx.moveTo(p1[0], p1[1]);
+                        ctx.lineTo(p2[0], p2[1]);
+                        ctx.stroke();
+                    }
+
+                    const z = i * step;
+                    const p3 = project([-half, this.yOffset, z]);
+                    const p4 = project([half, this.yOffset, z]);
+                    if (p3 && p4) {
+                        ctx.beginPath();
+                        ctx.moveTo(p3[0], p3[1]);
+                        ctx.lineTo(p4[0], p4[1]);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+        const grid = new GridPlane();
+
+        // --- Stars / particles ---
+        class StarField {
+            constructor(count) {
+                this.stars = [];
+                for (let i = 0; i < count; i++) {
+                    this.stars.push({
+                        x: (Math.random() - 0.5) * 20,
+                        y: (Math.random() - 0.5) * 12,
+                        z: Math.random() * 15,
+                        size: 0.5 + Math.random() * 1.5,
+                        speed: 0.005 + Math.random() * 0.02,
+                        phase: Math.random() * Math.PI * 2,
+                        color: colors[Math.floor(Math.random() * colors.length)]
+                    });
+                }
+            }
+
+            draw(ctx, time, audioLevel) {
+                for (const star of this.stars) {
+                    star.z -= star.speed;
+                    if (star.z < 0.1) {
+                        star.z = 15;
+                        star.x = (Math.random() - 0.5) * 20;
+                        star.y = (Math.random() - 0.5) * 12;
+                    }
+
+                    const p = project([star.x, star.y, star.z]);
+                    if (!p) continue;
+
+                    const twinkle = 0.3 + Math.sin(time * 3 + star.phase) * 0.3 + audioLevel * 0.4;
+                    const sz = star.size * (1 + audioLevel * 2) * (600 / (star.z + 5)) * 0.1;
+
+                    ctx.fillStyle = star.color.replace('ALPHA', twinkle.toFixed(3));
+                    ctx.beginPath();
+                    ctx.arc(p[0], p[1], sz, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+        const starField = new StarField(100);
+
+        // --- Connection lines between nearby shapes ---
+        function drawConnections(ctx, time, audioLevel) {
+            const maxDist = 4;
+            const opacity = 0.03 + audioLevel * 0.05;
+
+            for (let i = 0; i < shapes.length; i++) {
+                for (let j = i + 1; j < shapes.length; j++) {
+                    const dx = shapes[i].pos[0] - shapes[j].pos[0];
+                    const dy = shapes[i].pos[1] - shapes[j].pos[1];
+                    const dz = shapes[i].pos[2] - shapes[j].pos[2];
+                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+                    if (dist < maxDist) {
+                        const p1 = project(shapes[i].pos);
+                        const p2 = project(shapes[j].pos);
+                        if (!p1 || !p2) continue;
+
+                        const fade = 1 - dist / maxDist;
+                        ctx.strokeStyle = `rgba(100, 180, 255, ${(opacity * fade).toFixed(4)})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(p1[0], p1[1]);
+                        ctx.lineTo(p2[0], p2[1]);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        // ============================================
+        // AUDIO ANALYSER
+        // ============================================
+        let audioContext, analyser, dataArray, audioSource;
+        let audioLevel = 0;
+
+        function initAudio(video) {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                audioSource = audioContext.createMediaElementSource(video);
+                audioSource.connect(analyser);
+                analyser.connect(audioContext.destination);
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+            } catch (e) {
+                console.warn('Audio analyser init failed:', e);
+            }
+        }
+
+        function getAudioLevel() {
+            if (!analyser || !dataArray) return 0;
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i];
+            }
+            return (sum / dataArray.length) / 255;
+        }
+
+        // ============================================
+        // WAVEFORM VISUALIZER
+        // ============================================
+        const waveformEl = document.getElementById('waveform');
+        const barCount = 40;
+        for (let i = 0; i < barCount; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'wave-bar';
+            bar.style.height = '2px';
+            waveformEl.appendChild(bar);
+        }
+
+        function updateWaveform() {
+            if (!analyser || !dataArray) return;
+            analyser.getByteFrequencyData(dataArray);
+            const bars = waveformEl.children;
+            const step = Math.floor(dataArray.length / barCount);
+            for (let i = 0; i < barCount; i++) {
+                const value = dataArray[i * step] || 0;
+                const height = 2 + (value / 255) * 28;
+                bars[i].style.height = height + 'px';
+            }
+        }
+
+        // ============================================
+        // SUBTITLE ENGINE
+        // ============================================
+        let subtitles = [];
+        let currentSubIndex = -1;
+        const subtitleEl = document.getElementById('subtitle-text');
+
+        function updateSubtitles(currentTime) {
+            let found = -1;
+            for (let i = 0; i < subtitles.length; i++) {
+                if (currentTime >= subtitles[i].start && currentTime <= subtitles[i].end) {
+                    found = i;
+                    break;
+                }
+            }
+
+            if (found !== currentSubIndex) {
+                if (found === -1) {
+                    subtitleEl.classList.remove('visible');
+                    subtitleEl.classList.add('fade-out');
+                    setTimeout(() => {
+                        if (currentSubIndex === -1) {
+                            subtitleEl.textContent = '';
+                            subtitleEl.classList.remove('fade-out');
+                        }
+                    }, 250);
+                } else {
+                    subtitleEl.classList.remove('visible', 'fade-out');
+                    subtitleEl.textContent = '';
+
+                    // Small delay for transition reset
+                    requestAnimationFrame(() => {
+                        subtitleEl.textContent = subtitles[found].text;
+                        requestAnimationFrame(() => {
+                            subtitleEl.classList.add('visible');
+                        });
+                    });
+                }
+                currentSubIndex = found;
+            }
+        }
+
+        // ============================================
+        // MAIN LOOP
+        // ============================================
+        let lastTime = 0;
+
+        function animate(timestamp) {
+            const time = timestamp / 1000;
+            const dt = Math.min(time - lastTime, 0.05);
+            lastTime = time;
+
+            audioLevel = getAudioLevel();
+
+            // Clear
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+            ctx.fillRect(0, 0, W, H);
+
+            // Very subtle radial gradient background
+            const grad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W * 0.7);
+            grad.addColorStop(0, `rgba(10, 15, 30, ${0.3 + audioLevel * 0.2})`);
+            grad.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, W, H);
+
+            // Draw elements
+            starField.draw(ctx, time, audioLevel);
+            grid.draw(ctx, time, audioLevel);
+
+            // Sort shapes by Z for proper rendering
+            shapes.sort((a, b) => b.pos[2] - a.pos[2]);
+
+            for (const shape of shapes) {
+                shape.update(dt, time);
+                shape.draw(ctx, time, audioLevel);
+            }
+
+            drawConnections(ctx, time, audioLevel);
+
+            // Update waveform
+            updateWaveform();
+
+            requestAnimationFrame(animate);
+        }
+
+        // ============================================
+        // LOAD & INIT
+        // ============================================
+        const video = document.getElementById('main-video');
+        const playBtn = document.getElementById('play-btn');
+        const progressBar = document.getElementById('progress-bar');
+        const timeDisplay = document.getElementById('time-display');
+        const volumeSlider = document.getElementById('volume-slider');
+        const loadingOverlay = document.getElementById('loading');
+
+        function formatTime(s) {
+            const m = Math.floor(s / 60);
+            const sec = Math.floor(s % 60);
+            return `${m}:${sec.toString().padStart(2, '0')}`;
+        }
+
+        // Load SRT
+        fetch('Export subtitles - 6802876868284094076.mp4 (08_02_2026).srt')
+            .then(r => {
+                if (!r.ok) throw new Error('SRT not found');
+                return r.text();
+            })
+            .then(text => {
+                subtitles = parseSRT(text);
+                console.log(`Loaded ${subtitles.length} subtitle entries`);
+            })
+            .catch(e => {
+                console.error('Failed to load subtitles:', e);
+                // Try URL-encoded name
+                return fetch(encodeURI('Export subtitles - 6802876868284094076.mp4 (08_02_2026).srt'))
+                    .then(r => r.text())
+                    .then(text => {
+                        subtitles = parseSRT(text);
+                        console.log(`Loaded ${subtitles.length} subtitle entries (encoded URL)`);
+                    })
+                    .catch(e2 => console.error('SRT load failed completely:', e2));
+            });
+
+        // Video events
+        video.addEventListener('loadeddata', () => {
+            loadingOverlay.classList.add('hidden');
+            video.volume = 0.8;
+        });
+
+        video.addEventListener('timeupdate', () => {
+            const pct = (video.currentTime / video.duration) * 100;
+            progressBar.value = pct;
+            timeDisplay.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+            updateSubtitles(video.currentTime);
+        });
+
+        video.addEventListener('ended', () => {
+            playBtn.textContent = '▶ Play';
+        });
+
+        // Controls
+        let isPlaying = false;
+
+        playBtn.addEventListener('click', () => {
+            if (!audioContext) {
+                initAudio(video);
+            }
+
+            if (isPlaying) {
+                video.pause();
+                playBtn.textContent = '▶ Play';
+            } else {
+                video.play();
+                playBtn.textContent = '⏸ Pause';
+            }
+            isPlaying = !isPlaying;
+        });
+
+        progressBar.addEventListener('input', () => {
+            const time = (progressBar.value / 100) * video.duration;
+            video.currentTime = time;
+        });
+
+        volumeSlider.addEventListener('input', () => {
+            video.volume = volumeSlider.value / 100;
+        });
+
+        // Spacebar to toggle play
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                playBtn.click();
+            }
+        });
+
+        // Create some CSS floating particles
+        for (let i = 0; i < 20; i++) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            p.style.left = Math.random() * 100 + 'vw';
+            p.style.animationDuration = (8 + Math.random() * 15) + 's';
+            p.style.animationDelay = Math.random() * 10 + 's';
+            p.style.width = (1 + Math.random() * 2) + 'px';
+            p.style.height = p.style.width;
+            document.body.appendChild(p);
+        }
+
+        // Start animation
+        requestAnimationFrame(animate);
+
+        // Fallback: hide loader after 5s
+        setTimeout(() => {
+            loadingOverlay.classList.add('hidden');
+        }, 5000);
+    </script>
+</body>
+</html>
