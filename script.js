@@ -1,8 +1,9 @@
 // Конфигурация
 const CONFIG = {
-    API_KEY: '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',
+    API_KEY: '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', // Вставьте сюда ваш ключ
     API_URL: 'https://openrouter.ai/api/v1/chat/completions',
-    MODEL: 'TNG: DeepSeek R1T2 Chimera (free)',
+    MODEL: 'deepseek/deepseek-chat-v3-0324:free', // Более стабильная модель
+    USE_API: true,
     CHARACTERS: [
         {
             id: 1,
@@ -11,7 +12,7 @@ const CONFIG = {
             color: "#ff6b6b",
             tag: "Тихий хаос",
             bio: "Американский вайб на русском. Сарказм, мемы, случайные фразы. Всегда в теме, но делает вид что ему пофиг.",
-            style: "Типа крутой пацан с американским вайбом. Использует сленг: 'бро', 'ф', 'черт', 'втф'. Любит мемы и сарказм. Отвечает коротко, но метко."
+            style: "Ты крутой пацан с американским вайбом. Используй сленг: 'бро', 'ф', 'черт', 'втф', 'пёхнуть'. Люби мемы и сарказм. Отвечай коротко, но метко. Максимум 10 слов."
         },
         {
             id: 2,
@@ -20,7 +21,7 @@ const CONFIG = {
             color: "#4cd964",
             tag: "Строгий но с юмором",
             bio: "Злой, строгий, угрожающий, но с юмором. Любит 'воспитывать' молодежь в своем стиле.",
-            style: "Строгий и угрожающий, но с иронией. Говорит как учитель или старший брат. Использует угрозы в шутку, типа 'я тебе сейчас уши надеру'. Всегда с юмором, даже когда злится."
+            style: "Ты строгий и угрожающий, но с иронией. Говори как учитель или старший брат. Используй угрозы в шутку: 'я тебе сейчас уши надеру'. Всегда с юмором, даже когда злишься. Максимум 10 слов."
         },
         {
             id: 3,
@@ -29,7 +30,7 @@ const CONFIG = {
             color: "#5ac8fa",
             tag: "Расслабленный бро",
             bio: "Всегда чиллит, говорит медленно, использует 'братан', 'чувак'. Ничего не напрягает.",
-            style: "Супер расслабленный. Всегда говорит 'братан', 'чувак', 'не парься'. Фразы типа 'все ок', 'расслабься', 'чиллим'. Много смайликов и мемных отсылок."
+            style: "Ты супер расслабленный. Всегда говори 'братан', 'чувак', 'не парься'. Фразы типа 'все ок', 'расслабься', 'чиллим'. Много смайликов. Максимум 10 слов."
         }
     ]
 };
@@ -59,11 +60,14 @@ const elements = {
     tabs: document.querySelectorAll('.tab'),
     tabPanes: document.querySelectorAll('.tab-pane'),
     charactersList: document.querySelector('.characters-list'),
-    notification: document.getElementById('notification')
+    notification: document.getElementById('notification'),
+    apiStatus: document.querySelector('.api-status')
 };
 
 // Инициализация приложения
 function init() {
+    console.log('Инициализация приложения...');
+    
     // Загружаем сохраненные сообщения
     loadMessages();
     
@@ -85,139 +89,287 @@ function init() {
     if (state.messages.length === 0) {
         addSystemMessage('Добро пожаловать в 9B Legends! Начните общение с персонажами.');
     }
+    
+    // Проверяем API
+    testAPI();
 }
 
-// Показать экран регистрации
-function showRegistrationScreen() {
-    elements.registrationScreen.classList.add('active');
-    elements.mainInterface.classList.remove('active');
-    elements.usernameInput.focus();
-}
-
-// Показать основной интерфейс
-function showMainInterface() {
-    elements.registrationScreen.classList.remove('active');
-    elements.mainInterface.classList.add('active');
-    elements.messageInput.focus();
-}
-
-// Обновить отображение имени пользователя
-function updateUsernameDisplay() {
-    if (elements.currentUsername) {
-        elements.currentUsername.textContent = state.username;
+// Тестирование API
+async function testAPI() {
+    if (!CONFIG.USE_API) {
+        console.log('API отключено в настройках');
+        if (elements.apiStatus) {
+            elements.apiStatus.textContent = 'Offline (запасной режим)';
+            elements.apiStatus.style.background = '#ff6b6b';
+        }
+        return;
+    }
+    
+    try {
+        console.log('Тестирование API...');
+        const response = await fetch(CONFIG.API_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${CONFIG.API_KEY}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': window.location.origin,
+                'X-Title': '9B Legends Chat'
+            },
+            body: JSON.stringify({
+                model: CONFIG.MODEL,
+                messages: [{ role: "user", content: "Привет" }],
+                max_tokens: 10
+            })
+        });
+        
+        if (response.ok) {
+            console.log('API работает!');
+            if (elements.apiStatus) {
+                elements.apiStatus.textContent = 'Online';
+                elements.apiStatus.style.background = '#4cd964';
+            }
+        } else {
+            console.error('API ошибка:', response.status);
+            CONFIG.USE_API = false;
+            if (elements.apiStatus) {
+                elements.apiStatus.textContent = 'Ошибка API';
+                elements.apiStatus.style.background = '#ff9500';
+            }
+        }
+    } catch (error) {
+        console.error('API недоступно:', error);
+        CONFIG.USE_API = false;
+        if (elements.apiStatus) {
+            elements.apiStatus.textContent = 'Offline';
+            elements.apiStatus.style.background = '#ff6b6b';
+        }
     }
 }
 
-// Загрузить сообщения
-function loadMessages() {
-    elements.chatMessages.innerHTML = '';
-    
-    state.messages.forEach(msg => {
-        if (msg.type === 'system') {
-            addSystemMessage(msg.text, false);
-        } else if (msg.type === 'user') {
-            addUserMessage(msg.text, msg.sender, false);
-        } else if (msg.type === 'bot') {
-            addBotMessage(msg.text, msg.sender, msg.avatar, false);
-        }
-    });
-    
-    // Прокрутка вниз
-    scrollToBottom();
-}
+// Остальные функции остаются такими же, но обновим функцию generateAIResponse:
 
-// Загрузить персонажей
-function loadCharacters() {
-    if (!elements.charactersList) return;
-    
-    elements.charactersList.innerHTML = '';
-    
-    CONFIG.CHARACTERS.forEach(character => {
-        const card = document.createElement('div');
-        card.className = `character-card character${character.id}`;
-        card.innerHTML = `
-            <div style="display: flex; align-items: center;">
-                <div class="character-avatar" style="background: ${character.color}">
-                    ${character.avatar}
-                </div>
-                <div class="character-info">
-                    <h3>${character.name}</h3>
-                    <span class="character-tag">${character.tag}</span>
-                    <p class="character-bio">${character.bio}</p>
-                </div>
-            </div>
-        `;
-        elements.charactersList.appendChild(card);
-    });
-}
+// Сгенерировать ответ через AI API
+async function generateAIResponse(userMessage, character) {
+    if (!CONFIG.USE_API) {
+        throw new Error('API отключено');
+    }
 
-// Назначить обработчики событий
-function setupEventListeners() {
-    // Кнопка входа в чат
-    elements.joinChatBtn.addEventListener('click', joinChat);
-    elements.usernameInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') joinChat();
-    });
-    
-    // Отправка сообщения
-    elements.sendBtn.addEventListener('click', sendMessage);
-    elements.messageInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
-    
-    // Быстрые эмодзи
-    document.querySelectorAll('.quick-emoji').forEach(btn => {
-        btn.addEventListener('click', () => {
-            elements.messageInput.value += btn.dataset.emoji;
-            elements.messageInput.focus();
+    const prompt = `Ты - ${character.name}. ${character.style}
+
+Пользователь сказал: "${userMessage}"
+
+Ответь в стиле своего персонажа. Используй школьный сленг. Будь естественным. Отвечай на русском.`;
+
+    console.log(`Отправка запроса для ${character.name}:`, prompt.substring(0, 100) + '...');
+
+    try {
+        const response = await fetch(CONFIG.API_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${CONFIG.API_KEY}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': window.location.origin,
+                'X-Title': '9B Legends Chat'
+            },
+            body: JSON.stringify({
+                model: CONFIG.MODEL,
+                messages: [
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ],
+                max_tokens: 50,
+                temperature: 0.8,
+                top_p: 0.9
+            })
         });
-    });
-    
-    // Вкладки
-    elements.tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            const tabName = tab.dataset.tab;
-            switchTab(tabName);
-        });
-    });
-    
-    // Кнопка смены имени
-    elements.changeNameBtn.addEventListener('click', () => {
-        state.username = null;
-        localStorage.removeItem('9b_username');
-        showRegistrationScreen();
-    });
-    
-    // Очистка чата
-    elements.clearChatBtn.addEventListener('click', clearChat);
-    
-    // Выход
-    elements.logoutBtn.addEventListener('click', () => {
-        state.username = null;
-        state.messages = [];
-        localStorage.clear();
-        showRegistrationScreen();
-        showNotification('Вы вышли из чата');
-    });
-    
-    // Переключатели
-    document.getElementById('notifications-toggle').addEventListener('change', function() {
-        showNotification(this.checked ? 'Уведомления включены' : 'Уведомления выключены');
-    });
-    
-    document.getElementById('theme-toggle').addEventListener('change', function() {
-        document.body.style.background = this.checked 
-            ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' 
-            : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-        showNotification(this.checked ? 'Темная тема включена' : 'Светлая тема включена');
-    });
+
+        console.log('Статус ответа:', response.status);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Ошибка API:', errorText);
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Ответ API:', data);
+        
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+            return data.choices[0].message.content.trim();
+        } else {
+            throw new Error('Неверный формат ответа API');
+        }
+    } catch (error) {
+        console.error(`Ошибка при запросе к API для ${character.name}:`, error);
+        throw error;
+    }
 }
 
-// Войти в чат
-function joinChat() {
+// Улучшенная функция для запасных ответов
+function getFallbackResponse(character, userMessage) {
+    const userMsg = userMessage.toLowerCase();
+    
+    // Разные ответы в зависимости от контекста
+    if (userMsg.includes('привет') || userMsg.includes('хай') || userMsg.includes('здаров')) {
+        return character.name === ".ᅠᅠ" ? "Хай, бро! 👻" :
+               character.name === "Задира Боб" ? "Ну привет, только без дурацких выходок! 😠" :
+               "Привет, чувак! Расслабься 😎";
+    }
+    
+    if (userMsg.includes('как дела') || userMsg.includes('че как')) {
+        return character.name === ".ᅠᅠ" ? "Норм, чиллим 😎" :
+               character.name === "Задира Боб" ? "Дела? Уроки сделал? Нет? Вот и молчи! 📚" :
+               "Все ок, братан, просто кайфуем 🌴";
+    }
+    
+    if (userMsg.includes('школа') || userMsg.includes('урок')) {
+        return character.name === ".ᅠᅠ" ? "Опять школа... ф 😒" :
+               character.name === "Задира Боб" ? "Учиться надо, а не в чате сидеть! 🧠" :
+               "Забей на школу, чувак, чиллим 😎";
+    }
+    
+    // Общие случайные ответы
+    const responses = {
+        ".ᅠᅠ": [
+            "Ф в чат! 🔥",
+            "Норм тема, бро 👌",
+            "Втф? Серьезно? 🤨",
+            "Черт, ты прав... 😂",
+            "Мемная тема! 📱",
+            "Бро, это кринж... 🙈",
+            "Ахаха, хорош! 🤣",
+            "Понял, принял 🫡"
+        ],
+        "Задира Боб": [
+            "Что за бред несешь? 🤨",
+            "Сядь, два! И помолчи! 📝",
+            "Молодой человек, это недопустимо! 👮",
+            "Я тебе сейчас... ладно, шучу 😉",
+            "Иди уроки делай лучше! 📚",
+            "Опять ты со своими глупостями... 🤦‍♂️",
+            "Так, прекрати это! ✋",
+            "Воспитание нужно, вот что! 🧐"
+        ],
+        "Чилл Майк": [
+            "Расслабься, бро 😌",
+            "Все гуд, не парься 🤙",
+            "Чиллим, все ок 🌊",
+            "Просто кайфуем, чувак 🏖️",
+            "Забей, не стоит нервов ✌️",
+            "Все путем, расслабься 🍹",
+            "Норм все, чувак 😊",
+            "Просто отдыхай, братан 🎧"
+        ]
+    };
+    
+    const charResponses = responses[character.name] || ["Норм тема!"];
+    return charResponses[Math.floor(Math.random() * charResponses.length)];
+}
+
+// Обновим функцию generateCharacterResponses для лучшей обработки ошибок:
+async function generateCharacterResponses(userMessage) {
+    const responses = [];
+    
+    // Сначала убираем индикатор загрузки
+    const systemMessages = document.querySelectorAll('.message.system');
+    if (systemMessages.length > 0) {
+        systemMessages[systemMessages.length - 1].remove();
+    }
+    
+    // Для каждого персонажа
+    for (const character of CONFIG.CHARACTERS) {
+        try {
+            let response;
+            
+            if (CONFIG.USE_API) {
+                response = await generateAIResponse(userMessage, character);
+            } else {
+                // Используем запасной режим
+                response = getFallbackResponse(character, userMessage);
+            }
+            
+            responses.push({
+                character,
+                response
+            });
+            
+            // Добавляем сообщение с задержкой для реализма
+            setTimeout(() => {
+                addBotMessage(response, character.name, character.avatar);
+                
+                // Прокручиваем вниз после каждого сообщения
+                scrollToBottom();
+                
+                // После последнего персонажа снимаем флаг генерации
+                if (responses.length === CONFIG.CHARACTERS.length) {
+                    state.isGenerating = false;
+                }
+            }, responses.length * 800);
+            
+        } catch (error) {
+            console.error(`Ошибка генерации для ${character.name}:`, error);
+            // Используем запасной ответ
+            const fallbackResponse = getFallbackResponse(character, userMessage);
+            responses.push({
+                character,
+                response: fallbackResponse
+            });
+            
+            // Добавляем запасной ответ с задержкой
+            setTimeout(() => {
+                addBotMessage(fallbackResponse, character.name, character.avatar);
+                scrollToBottom();
+                
+                if (responses.length === CONFIG.CHARACTERS.length) {
+                    state.isGenerating = false;
+                }
+            }, responses.length * 800);
+        }
+    }
+}
+
+// В функции sendMessage добавим отладку:
+async function sendMessage() {
+    const text = elements.messageInput.value.trim();
+    
+    if (!text) {
+        showNotification('Напиши что-нибудь, бро!');
+        return;
+    }
+    
+    if (!state.username) {
+        showNotification('Сначала зарегистрируйся!');
+        return;
+    }
+    
+    if (state.isGenerating) {
+        showNotification('Подожди, персонажи думают...');
+        return;
+    }
+    
+    console.log('Отправка сообщения:', text);
+    
+    // Добавляем сообщение пользователя
+    addUserMessage(text, state.username);
+    elements.messageInput.value = '';
+    
+    // Показываем индикатор загрузки
+    state.isGenerating = true;
+    addSystemMessage('Персонажи думают над ответом...');
+    
+    // Генерируем ответы
+    await generateCharacterResponses(text);
+}
+
+// Также добавьте эту функцию для отображения ошибок в чате:
+function showErrorInChat(error) {
+    addSystemMessage(`Ошибка: ${error}. Используем запасные ответы.`);
+}
+
+// И обновите функцию joinChat чтобы она проверяла API:
+async function joinChat() {
     const username = elements.usernameInput.value.trim();
     
     if (!username) {
@@ -243,12 +395,19 @@ function joinChat() {
     showMainInterface();
     showNotification(`Добро пожаловать, ${username}!`);
     
-    // Добавляем приветственное сообщение от персонажей
+    // Тестируем API при входе
+    await testAPI();
+    
+    // Добавляем приветственные сообщения
     setTimeout(() => {
         addSystemMessage(`${username} присоединился к чату!`);
         
         // Персонажи приветствуют нового пользователя
         setTimeout(() => {
+            if (!CONFIG.USE_API) {
+                addSystemMessage('API недоступно. Используем запасные ответы.');
+            }
+            
             addBotMessage(`О, новый чел в чате! Привет, ${username}, бро! 👋`, ".ᅠᅠ", "👻");
             setTimeout(() => {
                 addBotMessage(`Только без дурацких выходок, ${username}. А то буду воспитывать! 😠`, "Задира Боб", "😠");
@@ -259,351 +418,3 @@ function joinChat() {
         }, 500);
     }, 300);
 }
-
-// Переключить вкладку
-function switchTab(tabName) {
-    // Обновляем активную вкладку
-    elements.tabs.forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.tab === tabName);
-    });
-    
-    // Показываем соответствующую панель
-    elements.tabPanes.forEach(pane => {
-        pane.classList.toggle('active', pane.id === `${tabName}-tab`);
-    });
-    
-    // Прокручиваем чат вниз при переключении
-    if (tabName === 'chat') {
-        setTimeout(scrollToBottom, 100);
-    }
-}
-
-// Отправить сообщение
-async function sendMessage() {
-    const text = elements.messageInput.value.trim();
-    
-    if (!text) {
-        showNotification('Напиши что-нибудь, бро!');
-        return;
-    }
-    
-    if (!state.username) {
-        showNotification('Сначала зарегистрируйся!');
-        return;
-    }
-    
-    if (state.isGenerating) {
-        showNotification('Подожди, персонажи думают...');
-        return;
-    }
-    
-    // Добавляем сообщение пользователя
-    addUserMessage(text, state.username);
-    elements.messageInput.value = '';
-    
-    // Показываем индикатор загрузки
-    state.isGenerating = true;
-    addSystemMessage('Персонажи думают над ответом...');
-    
-    try {
-        // Генерируем ответы от всех персонажей
-        await generateCharacterResponses(text);
-    } catch (error) {
-        console.error('Ошибка генерации ответов:', error);
-        showNotification('Ошибка API, используем запасные ответы');
-        
-        // Запасные ответы
-        setTimeout(() => {
-            addBotMessage(`Норм тема, ${state.username}! Ф в чат 👻`, ".ᅠᅠ", "👻");
-            setTimeout(() => {
-                addBotMessage(`Что за бред ты несешь? Сядь, два! 😠`, "Задира Боб", "😠");
-                setTimeout(() => {
-                    addBotMessage(`Чувак, не парься, все гуд 😎`, "Чилл Майк", "😎");
-                    state.isGenerating = false;
-                }, 800);
-            }, 800);
-        }, 1000);
-    }
-}
-
-// Сгенерировать ответы персонажей
-async function generateCharacterResponses(userMessage) {
-    const responses = [];
-    
-    // Для каждого персонажа
-    for (const character of CONFIG.CHARACTERS) {
-        try {
-            const response = await generateAIResponse(userMessage, character);
-            responses.push({
-                character,
-                response
-            });
-            
-            // Добавляем сообщение с задержкой для реализма
-            setTimeout(() => {
-                addBotMessage(response, character.name, character.avatar);
-                
-                // После последнего персонажа убираем индикатор загрузки
-                if (responses.length === CONFIG.CHARACTERS.length) {
-                    const systemMessages = document.querySelectorAll('.message.system');
-                    if (systemMessages.length > 0) {
-                        systemMessages[systemMessages.length - 1].remove();
-                    }
-                    state.isGenerating = false;
-                    scrollToBottom();
-                }
-            }, responses.length * 800);
-            
-        } catch (error) {
-            console.error(`Ошибка генерации для ${character.name}:`, error);
-            // Используем запасной ответ
-            responses.push({
-                character,
-                response: getFallbackResponse(character, userMessage)
-            });
-        }
-    }
-}
-
-// Сгенерировать ответ через AI API
-async function generateAIResponse(userMessage, character) {
-    const prompt = `Ты - ${character.name}, ${character.style}
-
-Пользователь написал: "${userMessage}"
-
-Ответь в стиле своего персонажа. Используй школьный сленг: "бро", "ф", "черт", "втф", "пёхнуть", мемные отсылки. 
-Ответ должен быть коротким (1-2 предложения), живым и в стиле персонажа.
-Не используй markdown, только текст.
-
-Ответ:`;
-
-    const response = await fetch(CONFIG.API_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${CONFIG.API_KEY}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://9b-legends-chat.com',
-            'X-Title': '9B Legends Chat'
-        },
-        body: JSON.stringify({
-            model: CONFIG.MODEL,
-            messages: [
-                {
-                    role: "user",
-                    content: prompt
-                }
-            ],
-            max_tokens: 100,
-            temperature: 0.9
-        })
-    });
-
-    if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.choices[0].message.content.trim();
-}
-
-// Запасной ответ (если API не работает)
-function getFallbackResponse(character, userMessage) {
-    const responses = {
-        ".ᅠᅠ": [
-            "Ф в чат, бро! 😎",
-            "Норм тема, чел 👻",
-            "Втф ты несешь? 🤔",
-            "Черт, опять эта тема... 😂",
-            "Бро, ты в курсе мемов? 🔥"
-        ],
-        "Задира Боб": [
-            "Сядь, два! И не умничай! 😠",
-            "Я тебе сейчас уши надеру за такое! 👊",
-            "Что за бред? Иди уроки делай! 📚",
-            "Молодежь пошла... совсем с ума посходили! 🤦‍♂️",
-            "Повтори, только попробуй! 😡"
-        ],
-        "Чилл Майк": [
-            "Расслабься, бро, все ок 😎",
-            "Чиллим, не парься 🤙",
-            "Все гуд, чувак, просто отдыхаем 🌴",
-            "Забей, просто кайфуем 🍹",
-            "Не напрягайся, все путем ✌️"
-        ]
-    };
-    
-    const charResponses = responses[character.name] || ["Норм тема!"];
-    return charResponses[Math.floor(Math.random() * charResponses.length)];
-}
-
-// Добавить сообщение пользователя
-function addUserMessage(text, sender = state.username, save = true) {
-    const messageElement = document.createElement('div');
-    messageElement.className = 'message user';
-    messageElement.innerHTML = `
-        <div class="message-content">
-            <div class="message-sender">${sender}</div>
-            ${escapeHtml(text)}
-            <div class="message-time">${getCurrentTime()}</div>
-        </div>
-    `;
-    
-    elements.chatMessages.appendChild(messageElement);
-    
-    if (save) {
-        state.messages.push({
-            type: 'user',
-            text: text,
-            sender: sender,
-            time: new Date().toISOString()
-        });
-        saveMessages();
-    }
-    
-    scrollToBottom();
-}
-
-// Добавить сообщение бота
-function addBotMessage(text, sender, avatar, save = true) {
-    const messageElement = document.createElement('div');
-    messageElement.className = 'message bot';
-    messageElement.innerHTML = `
-        <div class="message-content">
-            <div class="message-sender">
-                <span style="color: ${getCharacterColor(sender)}; font-weight: bold;">${sender}</span>
-            </div>
-            ${escapeHtml(text)}
-            <div class="message-time">${getCurrentTime()}</div>
-        </div>
-    `;
-    
-    elements.chatMessages.appendChild(messageElement);
-    
-    if (save) {
-        state.messages.push({
-            type: 'bot',
-            text: text,
-            sender: sender,
-            avatar: avatar,
-            time: new Date().toISOString()
-        });
-        saveMessages();
-    }
-    
-    scrollToBottom();
-    
-    // Воспроизводим звук уведомления (если включено)
-    if (document.getElementById('notifications-toggle').checked) {
-        playNotificationSound();
-    }
-}
-
-// Добавить системное сообщение
-function addSystemMessage(text, save = true) {
-    const messageElement = document.createElement('div');
-    messageElement.className = 'message system';
-    messageElement.innerHTML = `
-        <div class="message-content">
-            ${escapeHtml(text)}
-        </div>
-    `;
-    
-    elements.chatMessages.appendChild(messageElement);
-    
-    if (save) {
-        state.messages.push({
-            type: 'system',
-            text: text,
-            time: new Date().toISOString()
-        });
-        saveMessages();
-    }
-    
-    scrollToBottom();
-}
-
-// Получить цвет персонажа
-function getCharacterColor(name) {
-    const character = CONFIG.CHARACTERS.find(c => c.name === name);
-    return character ? character.color : '#667eea';
-}
-
-// Очистить чат
-function clearChat() {
-    if (!confirm('Точно очистить весь чат?')) return;
-    
-    state.messages = [];
-    saveMessages();
-    loadMessages();
-    showNotification('Чат очищен');
-}
-
-// Сохранить сообщения
-function saveMessages() {
-    localStorage.setItem('9b_messages', JSON.stringify(state.messages));
-}
-
-// Прокрутить вниз
-function scrollToBottom() {
-    setTimeout(() => {
-        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
-    }, 100);
-}
-
-// Показать уведомление
-function showNotification(text, duration = 3000) {
-    elements.notification.textContent = text;
-    elements.notification.classList.add('show');
-    
-    setTimeout(() => {
-        elements.notification.classList.remove('show');
-    }, duration);
-}
-
-// Воспроизвести звук уведомления
-function playNotificationSound() {
-    try {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.frequency.value = 800;
-        oscillator.type = 'sine';
-        
-        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.2);
-    } catch (e) {
-        console.log('Audio not supported');
-    }
-}
-
-// Получить текущее время
-function getCurrentTime() {
-    const now = new Date();
-    return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-}
-
-// Экранирование HTML
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// Инициализация при загрузке страницы
-document.addEventListener('DOMContentLoaded', init);
-
-// Обновляем время в верхней панели
-setInterval(() => {
-    const timeElement = document.querySelector('.time');
-    if (timeElement) {
-        const now = new Date();
-        timeElement.textContent = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    }
-}, 60000);
