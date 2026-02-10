@@ -1,0 +1,10 @@
+
+body { font-family: Arial, sans-serif; background: #222; color: #fff; display:flex; justify-content:center; align-items:center; height:100vh; }
+#phone { width: 360px; height: 640px; background: #111; border-radius: 30px; overflow: hidden; display:flex; flex-direction:column; }
+#header { background:#333; text-align:center; padding:10px; font-weight:bold; }
+#chat-box { flex:1; overflow-y:auto; padding:10px; }
+#chat-box div { margin-bottom:8px; }
+#message-input { width:70%; padding:5px; }
+#send-btn { width:28%; }
+#login-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; }
+#login-screen input { padding:5px; margin-bottom:10px; width:80%; }
