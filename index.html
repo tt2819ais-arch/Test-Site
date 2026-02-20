@@ -1,86 +1,13 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Простой сайт с авторизацией</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #121212;
-            color: #fff;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
-        #login-container {
-            background: #1e1e1e;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-        input {
-            display: block;
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 5px;
-            border: none;
-        }
-        button {
-            width: 100%;
-            padding: 10px;
-            background: #4caf50;
-            border: none;
-            border-radius: 5px;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        button:hover {
-            background: #45a049;
-        }
-        #welcome {
-            display: none;
-            text-align: center;
-        }
-    </style>
+    <title>Тест Hydra</title>
 </head>
 <body>
-    <div id="login-container">
-        <h2>Вход</h2>
-        <input type="text" id="username" placeholder="Имя пользователя">
-        <input type="password" id="password" placeholder="Пароль">
-        <button onclick="login()">Войти</button>
-        <p id="error" style="color: red;"></p>
-    </div>
-
-    <div id="welcome">
-        <h2>Добро пожаловать!</h2>
-        <p>Вы успешно вошли на сайт.</p>
-        <button onclick="logout()">Выйти</button>
-    </div>
-
-    <script>
-        function login() {
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-
-            if(username === 'root' && password === 'root') {
-                document.getElementById('login-container').style.display = 'none';
-                document.getElementById('welcome').style.display = 'block';
-            } else {
-                document.getElementById('error').textContent = 'Неверное имя пользователя или пароль!';
-            }
-        }
-
-        function logout() {
-            document.getElementById('welcome').style.display = 'none';
-            document.getElementById('login-container').style.display = 'block';
-            document.getElementById('username').value = '';
-            document.getElementById('password').value = '';
-            document.getElementById('error').textContent = '';
-        }
-    </script>
+    <form method="POST" action="login.php">
+        <input type="text" name="username" placeholder="Логин">
+        <input type="password" name="password" placeholder="Пароль">
+        <button type="submit">Войти</button>
+    </form>
 </body>
 </html>
